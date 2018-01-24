@@ -75,6 +75,7 @@ class SelectorBIC(ModelSelector):
         :return: GaussianHMM object
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         # TODO implement model selection based on BIC scores
 
@@ -111,6 +112,7 @@ class SelectorDIC(ModelSelector):
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         model_best = None
         score_best = float("-inf")
@@ -146,35 +148,33 @@ class SelectorCV(ModelSelector):
 
     '''
 
+    def cv_score(self, n):
+        scores = []
+        split_method = KFold(n_splits=2)
+
+        for train_idx, test_idx in split_method.split(self.sequences):
+            self.X, self.lengths = combine_sequences(train_idx, self.sequences)
+
+            model = self.base_model(n)
+            X, l = combine_sequences(test_idx, self.sequences)
+
+            scores.append(model.score(X, l))
+        return np.mean(scores), model
+
+
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         # TODO implement model selection using CV
-        kf = KFold(n_splits = 5, shuffle = False, random_state = None)
-        logL_list = []
-        model_best = None
-        logL_best = float("-inf")
-
-        for n_components in range(self.min_n_components, self.max_n_components + 1):
-            try:
-                if len(self.sequences) > 2:
-                    for train_idx, test_idx in kf.split(self.sequences):
-                        self.X, self.lengths = combine_sequences(train_idx, self.sequences)
-                        X_test, lengths_test = combine_sequences(test_idx, self.sequences)
-
-                        model = self.base_model(n_components)
-                        logL = model.score(X_test, lengths_test)
-                else:
-                    model = self.base_model(n_components)
-                    logL = model.score(self.X, self.lengths)
-                
-                logL_list.append(logL)
-                logL_avg = np.mean(logL_list)
-
-                if logL_avg > logL_best:
-                    logL_best = logL_avg
-                    model_best = model
-            except:
-                pass
-
-        return model_best
+        try:
+            best_score = float("-Inf")
+            best_model = None
+            for n in range(self.min_n_components, self.max_n_components+1):
+                score, model = self.cv_score(n)
+                if score > best_score:
+                    best_score = score
+                    best_model = model
+            return best_model
+        except:
+            return self.base_model(self.n_constant)
